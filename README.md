@@ -40,6 +40,8 @@ bets/
 cp .env.example .env
 # Edita .env com os teus valores reais
 ```
+> [!WARNING]
+> Ao preencher o seu arquivo `.env`, certifique-se de que **não há espaços em branco** no final das linhas (ex: `HEADLESS=true    `). O Docker lê esses espaços e isso pode causar erros. Coloque comentários sempre em linhas separadas.
 
 ### 3. Instalar dependências
 
@@ -117,7 +119,30 @@ Para plataformas com captcha, define também:
 3. `csv_parser.py`: cria `ColumnMap` com as colunas do CSV e regista em `PLATFORM_MAPS`
 4. `.env`: adiciona as passwords das novas contas
 
-## Proximos passos: migração para cloud
+## Deploy e Produção (Railway + Docker)
 
-Ver `docs/cloud-setup.md` (a criar quando estiveres pronto para migrar).
-Opções recomendadas: Railway (simples) ou Google Cloud Run (escalável).
+O projeto já está configurado com um `Dockerfile` pronto para produção.
+
+### 1. Rodando com Docker Localmente
+
+Para testar o robô isolado na sua máquina usando o Docker:
+
+```bash
+# 1. Construir a imagem (apenas quando alterar código Python)
+docker build -t bets-scraper .
+
+# 2. Executar o robô (mapeando a pasta data e lendo o .env)
+docker run -it --rm --env-file .env -v "${PWD}/data:/app/data" bets-scraper
+
+# 3. Executar o robô com argumentos específicos
+docker run -it --rm --env-file .env -v "${PWD}/data:/app/data" bets-scraper python main.py --accounts 25
+```
+
+### 2. Publicando no Railway
+
+1. Adicione as alterações ao GitHub e faça o push (`git push origin main`).
+2. Crie um novo projeto no [Railway.app](https://railway.app) e escolha **Deploy from GitHub repo**.
+3. Selecione o repositório deste projeto.
+4. Vá até a aba **Variables** no painel do Railway e cole todas as variáveis e valores do seu arquivo `.env` local.
+5. Certifique-se de que a variável `HEADLESS` está configurada como `true` nas variáveis do Railway.
+6. O Railway fará o build do Dockerfile automaticamente e iniciará o scraper. Acompanhe pela aba **View Logs**.

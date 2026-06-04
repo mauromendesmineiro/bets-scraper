@@ -58,7 +58,7 @@ class BaseLoginHandler:
     def login(self, page: Page, url: str, username: str, password: str) -> LoginStatus:
         """Executa o fluxo completo de login e devolve o status."""
         log.info(f"Acessando {url}")
-        page.goto(url, wait_until="domcontentloaded")
+        page.goto(url, wait_until="networkidle", timeout=30000)
 
         self._fill_credentials(page, username, password)
 

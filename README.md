@@ -25,7 +25,6 @@ bets2/
 │   └── migrate_from_excel.py  # migração única do Excel → Supabase
 ├── main.py                 # orquestrador principal
 ├── .env.example            # template de variáveis de ambiente
-├── Dockerfile              # imagem pronta para produção
 └── pyproject.toml
 ```
 
@@ -65,7 +64,7 @@ cp .env.example .env
 ```
 
 > [!WARNING]
-> Ao preencher o `.env`, certifique-se de que **não há espaços em branco** no final das linhas (ex: `HEADLESS=true    `). O Docker lê esses espaços e pode causar erros. Coloque comentários sempre em linhas separadas.
+> Ao preencher o `.env`, certifique-se de que **não há espaços em branco** no final das linhas (ex: `HEADLESS=true    `). Coloque comentários sempre em linhas separadas.
 
 Variáveis obrigatórias:
 
@@ -172,31 +171,18 @@ class MinhaPlataformaLoginHandler(BaseLoginHandler):
     HAS_CAPTCHA       = True
 ```
 
-## Deploy e Produção (Railway + Docker)
+## Deploy e Produção (GitHub Actions)
 
-O projeto tem um `Dockerfile` pronto para produção com Playwright e Chromium.
+O scraper é executado automaticamente via GitHub Actions todos os dias às **07:00 UTC** (`.github/workflows/scraper.yml`).
 
-### Rodando com Docker localmente
+### Configurar secrets no GitHub
 
-```bash
-# Constrói a imagem
-docker build -t bets-scraper .
+1. Vai a **Settings → Secrets and variables → Actions** no repositório
+2. Adiciona cada variável do `.env` como um secret (`SUPABASE_URL`, `SUPABASE_KEY`, `PASS_...`, etc.)
 
-# Executa (mapeando a pasta data e lendo o .env)
-docker run -it --rm --env-file .env -v "${PWD}/data:/app/data" bets-scraper
+### Executar manualmente
 
-# Com argumentos específicos
-docker run -it --rm --env-file .env -v "${PWD}/data:/app/data" bets-scraper python main.py --accounts 25
-```
-
-### Publicando no Railway
-
-1. Faça push das alterações para o GitHub (`git push origin main`)
-2. Crie um novo projeto em [Railway.app](https://railway.app) → **Deploy from GitHub repo**
-3. Selecione o repositório
-4. Aba **Variables**: cole todas as variáveis do `.env` local
-5. Certifique-se de que `HEADLESS=true` nas variáveis do Railway
-6. O Railway fará o build do Dockerfile automaticamente — acompanhe na aba **View Logs**
+No GitHub, vai a **Actions → Daily Bets Scraper → Run workflow**.
 
 ## Notificações de erro
 

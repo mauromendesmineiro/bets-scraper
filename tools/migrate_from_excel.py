@@ -94,9 +94,9 @@ def main():
 
         sql_lines.append(
             f"INSERT INTO accounts "
-            f"(platform_id, operador, empresa, username, login_url, file_name, has_captcha) VALUES\n"
+            f"(platform_id, operador, empresa, username, login_url, file_name, has_captcha, status) VALUES\n"
             f"  ({args.platform_id}, '{esc(operador)}', '{esc(empresa)}', "
-            f"'{esc(username)}', '{esc(login_url)}', '{esc(file_name)}', {str(has_captcha).lower()})\n"
+            f"'{esc(username)}', '{esc(login_url)}', '{esc(file_name)}', {str(has_captcha).lower()}, 'disabled')\n"
             f"ON CONFLICT (platform_id, operador, username) DO UPDATE SET\n"
             f"  operador=EXCLUDED.operador, empresa=EXCLUDED.empresa,\n"
             f"  login_url=EXCLUDED.login_url, file_name=EXCLUDED.file_name,\n"

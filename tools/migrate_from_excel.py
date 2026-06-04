@@ -67,6 +67,7 @@ def main():
         empresa = str(row.get("Empresa", "")).strip()
         login_url = clean_url(row.get("URL", ""))
         file_name = str(row.get("FileName", "")).strip()
+        has_captcha = bool(row.get("Captcha", row.get("captcha", 0)) == 1)
 
         if not username:
             warnings.append("Linha sem username ignorada")
@@ -93,12 +94,13 @@ def main():
 
         sql_lines.append(
             f"INSERT INTO accounts "
-            f"(platform_id, operador, empresa, username, login_url, file_name) VALUES\n"
+            f"(platform_id, operador, empresa, username, login_url, file_name, has_captcha, status) VALUES\n"
             f"  ({args.platform_id}, '{esc(operador)}', '{esc(empresa)}', "
-            f"'{esc(username)}', '{esc(login_url)}', '{esc(file_name)}')\n"
+            f"'{esc(username)}', '{esc(login_url)}', '{esc(file_name)}', {str(has_captcha).lower()}, 'disabled')\n"
             f"ON CONFLICT (platform_id, operador, username) DO UPDATE SET\n"
             f"  operador=EXCLUDED.operador, empresa=EXCLUDED.empresa,\n"
-            f"  login_url=EXCLUDED.login_url, file_name=EXCLUDED.file_name;\n"
+            f"  login_url=EXCLUDED.login_url, file_name=EXCLUDED.file_name,\n"
+            f"  has_captcha=EXCLUDED.has_captcha;\n"
         )
 
     # Escreve ficheiros

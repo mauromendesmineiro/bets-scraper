@@ -149,17 +149,14 @@ class NetreferLoginHandler(BaseLoginHandler):
 
 
 class IncomeAccessLoginHandler(BaseLoginHandler):
-    """
-    Income Access — possui captcha de imagem.
-    Ajusta os selectores reais da plataforma aqui.
-    """
+    """Income Access (ex: Betano affiliates) — captcha de imagem via 2captcha."""
 
     SEL_USERNAME = "#username"
     SEL_PASSWORD = "#password"
-    SEL_SUBMIT = "#loginBtn, button[type='submit']"
+    SEL_SUBMIT = "button.btn.btn-primary"
     SEL_AGREE = None
-    SEL_CAPTCHA = "img.captcha-image, #captchaImage"  # ajustar ao selector real
-    SEL_CAPTCHA_INPUT = "#captchaInput, input[name='captcha']"
+    SEL_CAPTCHA = "img[alt='This Is verification Image']"
+    SEL_CAPTCHA_INPUT = "#strverifyimg"
     HAS_CAPTCHA = True
 
 

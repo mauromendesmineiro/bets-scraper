@@ -195,6 +195,9 @@ def download_report(
     if "login" in page.url.lower():
         log.warning("Sessão expirou — a tentar novo login...")
         if handler and username and password:
+            # Navega explicitamente para a página de login e aguarda estabilização
+            page.goto(account["login_url"], wait_until="networkidle", timeout=30000)
+            time.sleep(1)
             status = handler.login(page, account["login_url"], username, password)
             if status != "SUCCESS":
                 log.error(f"Re-login falhou: {status}")

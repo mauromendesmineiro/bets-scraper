@@ -11,6 +11,8 @@ RUN pip install --no-cache-dir uv
 
 # 4. Define a pasta de trabalho dentro do contêiner
 WORKDIR /app
+# 4b. Create non-root user
+RUN addgroup --system --gid 1000 appgroup && adduser --system --uid 1000 --gid 1000 --home /app appuser
 
 # 5. Copia os ficheiros de lock primeiro (cache de dependências)
 COPY pyproject.toml uv.lock ./
@@ -23,6 +25,9 @@ RUN uv run playwright install --with-deps chromium
 
 # 8. Copia o resto do código
 COPY . .
+# 8b. Adjust permissions
+RUN chown -R appuser:appgroup /app
 
 # 9. Comando padrão
+USER appuser
 CMD ["uv", "run", "python", "main.py"]

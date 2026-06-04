@@ -1,10 +1,14 @@
 """
-Parser de CSVs Netrefer — multi-moeda e multi-idioma.
+Parser de CSVs Netrefer — multi-moeda, suporte diário e mensal.
 
-O Netrefer gera CSVs no idioma configurado por cada operador.
-Idiomas conhecidos: EN/PT (padrão) e ES (espanhol).
+Relatório diário  (MarketingSourceDailyFigures):
+  - Tem coluna "Date" por linha
+  - Chave única: account_id + report_date + marketing_source_id
 
-Mapeamento de colunas por idioma → nome canónico interno.
+Relatório mensal (MarketingSourceMonthlyFigures):
+  - Sem coluna "Date" — o mês é passado externamente
+  - Nova coluna "CPA Triggered"
+  - Chave única: account_id + report_month + marketing_source_id
 """
 
 from __future__ import annotations
@@ -19,13 +23,21 @@ from src.utils.logger import get_logger
 
 log = get_logger("csv_parser")
 
+# Prefixos de moeda — ordem importa (mais longos primeiro)
+CURRENCY_PREFIXES: list[tuple[str, str]] = [
+    ("R$", "BRL"),
+    ("€", "EUR"),
+    ("£", "GBP"),
+    ("COP", "COP"),
+    ("MXN", "MXN"),
+    ("PEN", "PEN"),
+    ("ARS", "ARS"),
+    ("CLP", "CLP"),
+    ("USD", "USD"),
+    ("$", "USD"),
+]
 
-# ── Mapa de colunas multi-idioma ──────────────────────────────────────────────
-# Chave: nome canónico interno
-# Valor: lista de nomes possíveis no CSV (EN/PT primeiro, ES segundo)
-
-# Idioma sempre EN (forçado por UpdateUserLanguage?languageID=1 antes do relatório)
-# Aliases mantidos como fallback caso algum operador não suporte EN
+# Aliases multi-idioma (EN/PT principal, ES fallback)
 COLUMN_ALIASES: dict[str, list[str]] = {
     "date": ["Date", "Fecha"],
     "marketing_source_id": ["Marketing Source ID", "ID de fuentes de marketing"],
@@ -54,24 +66,11 @@ COLUMN_ALIASES: dict[str, list[str]] = {
         "First Time Active Customers",
         "Primeros clientes activos",
     ],
+    "cpa_triggered": ["CPA Triggered"],  # só no relatório mensal
     "deposits": ["Deposits", "Depósitos"],
     "turnover": ["Turnover", "Facturación"],
     "net_revenue": ["Net Revenue", "Ingresos netos"],
 }
-
-# Moedas: prefixos mais longos primeiro (evita match parcial de "$" antes de "COP")
-CURRENCY_PREFIXES: list[tuple[str, str]] = [
-    ("R$", "BRL"),
-    ("€", "EUR"),
-    ("£", "GBP"),
-    ("COP", "COP"),
-    ("MXN", "MXN"),
-    ("PEN", "PEN"),
-    ("ARS", "ARS"),
-    ("CLP", "CLP"),
-    ("USD", "USD"),
-    ("$", "USD"),
-]
 
 
 class NetreferCsvParser:
@@ -86,50 +85,91 @@ class NetreferCsvParser:
     ):
         self.account_id = account_id
         self.platform_id = platform_id
-        self.operador = operador  # guardado em cada linha para rastreabilidade
+        self.operador = operador
         self.username = username
         self.platform_name = platform_name
 
-    def parse(
+    def parse_daily(
         self, csv_path: str | Path, scrape_run_id: int | None = None
     ) -> list[dict]:
-        path = Path(csv_path)
-        log.info(f"Analizando {path.name}")
-
-        df = pd.read_csv(path, dtype=str)
-        log.debug(f"CSV cargado: {len(df)} filas, columnas: {list(df.columns)}")
-
-        # Normaliza colunas: mapeia nomes do CSV para nomes canónicos
-        col_map = self._build_column_map(df.columns.tolist())
-        log.debug(f"Asignación de columnas: {col_map}")
-
-        date_col = col_map.get("date")
-        if not date_col:
+        """
+        Relatório diário — tem coluna Date por linha.
+        Chave única: account_id + report_date + marketing_source_id
+        """
+        df, col_map = self._load(csv_path)
+        if "date" not in col_map:
             raise ValueError(
-                f"Coluna de data não encontrada. Colunas no CSV: {list(df.columns)}\n"
-                f"Adiciona o nome da coluna em COLUMN_ALIASES['date'] no csv_parser.py"
+                f"Coluna 'Date' não encontrada no CSV diário. Colunas: {list(df.columns)}"
             )
-
-        # Remove linha de totais
-        df = df[
-            ~df[date_col].str.strip().str.lower().str.startswith("total")
-        ].reset_index(drop=True)
-        log.debug(f"Después del filtro de totales: {len(df)} filas")
-
         rows = []
         for _, row in df.iterrows():
             record = self._map_row(row, col_map, scrape_run_id)
-            if record:
-                rows.append(record)
-
-        log.info(f"Se han analizado {len(rows)} registros válidos de {path.name}")
+            if record is None:
+                continue
+            report_date = _parse_date(row.get(col_map["date"], ""))
+            if not report_date:
+                continue
+            record["report_date"] = report_date
+            record["report_month"] = None
+            rows.append(record)
+        log.info(f"Diário: {len(rows)} registos parseados de {Path(csv_path).name}")
         return rows
 
+    def parse_monthly(
+        self, csv_path: str | Path, report_month: str, scrape_run_id: int | None = None
+    ) -> list[dict]:
+        """
+        Relatório mensal — sem coluna Date.
+        report_month: string ISO do primeiro dia do mês (ex: "2026-06-01")
+        Chave única: account_id + report_month + marketing_source_id
+        """
+        from datetime import date as _date
+        today = _date.today().isoformat()
+
+        df, col_map = self._load(csv_path)
+        rows = []
+        for _, row in df.iterrows():
+            record = self._map_row(row, col_map, scrape_run_id)
+            if record is None:
+                continue
+            record["report_date"] = today
+            record["report_month"] = report_month
+            rows.append(record)
+        log.info(f"Mensal: {len(rows)} registos parseados de {Path(csv_path).name}")
+        return rows
+
+    def _load(self, csv_path: str | Path) -> tuple[pd.DataFrame, dict[str, str]]:
+        """Carrega CSV e constrói mapa de colunas. Filtra linha de totais."""
+        path = Path(csv_path)
+        log.info(f"A parsear {path.name}")
+        df = pd.read_csv(path, dtype=str)
+        log.debug(f"CSV carregado: {len(df)} linhas, colunas: {list(df.columns)}")
+
+        # Remove linha de totais (Marketing Source ID == "Totals:" ou similar)
+        id_col = next(
+            (
+                c
+                for c in df.columns
+                if "Marketing Source ID" in c or "ID de fuentes" in c
+            ),
+            None,
+        )
+        if id_col:
+            df = df[
+                ~df[id_col].str.strip().str.lower().str.startswith("total")
+            ].reset_index(drop=True)
+        # Também filtra por coluna Date se existir
+        date_col = next((c for c in df.columns if c in ("Date", "Fecha")), None)
+        if date_col:
+            df = df[
+                ~df[date_col].str.strip().str.lower().str.startswith("total")
+            ].reset_index(drop=True)
+
+        log.debug(f"Após filtro totais: {len(df)} linhas")
+        col_map = self._build_column_map(df.columns.tolist())
+        return df, col_map
+
     def _build_column_map(self, csv_columns: list[str]) -> dict[str, str]:
-        """
-        Devuelve {nombre_canónico: nombre_real_en_el_csv}.
-        Ex: {"date": "Fecha", "clicks": "Clics", ...}
-        """
         result = {}
         for canonical, aliases in COLUMN_ALIASES.items():
             for alias in aliases:
@@ -145,16 +185,8 @@ class NetreferCsvParser:
             col = col_map.get(canonical)
             return row[col] if col else None
 
-        report_date = _parse_date(get("date"))
-        if not report_date:
-            log.warning(f"Fecha no válida, línea omitida: {get('date')!r}")
-            return None
-
         source_id = _to_int(get("marketing_source_id"))
         if source_id is None:
-            log.warning(
-                f"ID de fuente de marketing no válido en la línea de {report_date}"
-            )
             return None
 
         currency = _detect_currency_from_row(
@@ -165,8 +197,6 @@ class NetreferCsvParser:
             "account_id": self.account_id,
             "platform_id": self.platform_id,
             "scrape_run_id": run_id,
-            "report_date": report_date,
-            # Origem dos dados — para rastreabilidade sem precisar de JOIN
             "platform_name": self.platform_name,
             "operador": self.operador,
             "account_username": self.username,
@@ -186,6 +216,7 @@ class NetreferCsvParser:
                 get("first_time_depositing_customers")
             ),
             "first_time_active_customers": _to_int(get("first_time_active_customers")),
+            "cpa_triggered": _to_int(get("cpa_triggered")),
             "deposits": _parse_money(get("deposits")),
             "turnover": _parse_money(get("turnover")),
             "net_revenue": _parse_money(get("net_revenue")),

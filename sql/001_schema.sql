@@ -96,8 +96,8 @@ create table if not exists affiliate_stats (
     platform_id     int not null references platforms(id),
     scrape_run_id   bigint references scrape_runs(id),
 
-    -- Dimensão temporal
-    report_date     date not null,
+    -- Dimensão temporal (null nos registos mensais — usa-se report_month)
+    report_date     date,
 
     -- Dimensão de marketing source
     marketing_source_id     int,
@@ -132,11 +132,32 @@ create table if not exists affiliate_stats (
     imported_at     timestamptz not null default now(),
     platform_name    text,
     operador         text,
-    account_username text;
+    account_username text,
 
-    -- Unicidade: conta + data + marketing source
+    -- Unicidade: conta + data + marketing source (diário)
     constraint uq_stat unique (account_id, report_date, marketing_source_id)
 );
+
+-- 1. Adiciona colunas necessárias para o relatório mensal
+alter table affiliate_stats
+    -- Período mensal (ex: 2026-06-01 = Junho 2026, sempre dia 1)
+    add column if not exists report_month  date,
+    -- Nova coluna CPA Triggered presente no CSV mensal
+    add column if not exists cpa_triggered int;
+
+-- report_date pode ser NULL nos registos mensais (usa-se report_month em vez disso)
+alter table affiliate_stats
+    alter column report_date drop not null;
+
+-- 2. A constraint uq_stat existente usa report_date + marketing_source_id
+--    Para o relatório mensal usamos report_month em vez de report_date
+--    Criamos uma constraint separada para evitar conflitos
+alter table affiliate_stats
+    drop constraint if exists uq_stat_monthly;
+
+alter table affiliate_stats
+    add constraint uq_stat_monthly
+    unique (account_id, report_month, marketing_source_id);
 
 -- ============================================================
 -- 5. ÍNDICES
@@ -211,11 +232,13 @@ select
     s.account_username,
     s.currency,
     s.report_date,
+    s.report_month,
     s.marketing_source_name                 as source,
     sum(s.views)                            as views,
     sum(s.clicks)                           as clicks,
     sum(s.signups)                          as signups,
     sum(s.first_time_depositing_customers)  as ftds,
+    sum(s.cpa_triggered)                    as cpa_triggered,
     sum(s.depositing_customers)             as depositing_customers,
     sum(s.active_customers)                 as active_customers,
     sum(s.deposits)                         as deposits,
@@ -223,8 +246,11 @@ select
 from affiliate_stats s
 group by
     s.platform_name, s.operador, s.account_username,
-    s.currency, s.report_date, s.marketing_source_name
-order by s.report_date desc, s.operador;
+    s.currency, s.report_date, s.report_month, s.marketing_source_name
+order by coalesce(s.report_date, s.report_month) desc, s.operador;
+
+-- 3. Índice no report_month
+create index if not exists idx_stats_month on affiliate_stats(report_month desc);
 
 -- ============================================================
 -- 9. SEED: Netrefer

@@ -18,13 +18,14 @@ LoginStatus = str
 # Valores possíveis:
 # SUCCESS | INVALID_CREDENTIALS | RATE_LIMIT | ACCESS_DENIED
 # ACCOUNT_DISABLED | PASSWORD_RESET_REQUIRED | UNKNOWN
+# (estes valores devem corresponder exactamente às comparações em main.py)
 
 
 # ── Padrões de erro por categoria ─────────────────────────────────────────────
 # Testados contra texto real do Netrefer em ES, PT, IT, EN
 
 _PATTERNS: dict[str, list[str]] = {
-    "CUENTA BLOQUEADA": [
+    "ACCOUNT_DISABLED": [
         # ES
         "bloqueado",
         "bloqueada",
@@ -51,7 +52,7 @@ _PATTERNS: dict[str, list[str]] = {
         "disabled",
         "suspended",
     ],
-    "CREDENCIALES INVALIDAS": [
+    "INVALID_CREDENTIALS": [
         # ES
         "no son válidos",
         "usuario o contraseña",
@@ -71,7 +72,7 @@ _PATTERNS: dict[str, list[str]] = {
         "wrong password",
         "username or password",
     ],
-    "LIMITE DE EJECUCION": [
+    "RATE_LIMIT": [
         "60 segundos",
         "60 seconds",
         "consecutivos",
@@ -81,7 +82,7 @@ _PATTERNS: dict[str, list[str]] = {
         "muitos pedidos",
         "rate limit",
     ],
-    "ACCESO DENEGADO": [
+    "ACCESS_DENIED": [
         "permiso denegado",
         "acceso denegado",
         "denegado",
@@ -136,20 +137,20 @@ def check_login_status(page: Page) -> LoginStatus:
 
     # 2. Reset de password obrigatório
     if _has_password_reset(page):
-        return "CAMBIAR CONTRASEÑA"
+        return "PASSWORD_RESET_REQUIRED"
 
     # 3. Elementos que só existem em sessão autenticada
     if _has_authenticated_elements(page):
-        return "REALIZADO"
+        return "SUCCESS"
 
     # 4. URL indica sessão activa
     url = page.url.lower()
     in_success_url = any(f in url for f in _SUCCESS_URL_FRAGMENTS)
     in_login_url = any(f in url for f in _LOGIN_URL_FRAGMENTS)
     if in_success_url and not in_login_url:
-        return "REALIZADO"
+        return "SUCCESS"
 
-    return "DESCONOCIDO"
+    return "UNKNOWN"
 
 
 def _collect_error_text(page: Page) -> str:

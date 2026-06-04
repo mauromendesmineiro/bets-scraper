@@ -27,6 +27,12 @@ def get_logger(name: str, log_dir: str = "logs") -> logging.Logger:
     )
 
     # Handler: stdout (sempre activo — essencial para containers)
+    # Força UTF-8 para evitar UnicodeEncodeError no Windows (cp1252 por defeito)
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
     stdout_handler = logging.StreamHandler(sys.stdout)
     stdout_handler.setLevel(logging.INFO)
     stdout_handler.setFormatter(fmt)

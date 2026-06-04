@@ -113,13 +113,21 @@ class Database:
         if not rows:
             return 0
 
+        # Detecta se são registos mensais ou diários pela primeira linha
+        is_monthly = rows[0].get("report_month") is not None
+        conflict_key = (
+            "account_id,report_month,marketing_source_id"
+            if is_monthly
+            else "account_id,report_date,marketing_source_id"
+        )
+
         batch_size = 500
         total = 0
         for i in range(0, len(rows), batch_size):
             batch = rows[i : i + batch_size]
             self._client.table("affiliate_stats").upsert(
                 batch,
-                on_conflict="account_id,report_date,marketing_source_id",
+                on_conflict=conflict_key,
             ).execute()
             total += len(batch)
             log.debug(f"Upsert: lote {i//batch_size + 1} — {len(batch)} filas")

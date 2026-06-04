@@ -37,7 +37,7 @@ class Config:
     headless: bool = field(
         default_factory=lambda: _optional("HEADLESS", "true").lower() == "true"
     )
-    slow_mo: int = field(default_factory=lambda: int(_optional("SLOW_MO", "200")))
+    slow_mo: int = field(default_factory=lambda: int(_optional("SLOW_MO", "0")))
     default_timeout: int = field(
         default_factory=lambda: int(_optional("DEFAULT_TIMEOUT", "15000"))
     )

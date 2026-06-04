@@ -25,18 +25,18 @@ load_dotenv()
 import argparse
 import sys
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright, Page, BrowserContext
 
 from src.config import config
 from src.scraper.captcha import CaptchaSolver
-from src.scraper.login import get_handler, LoginResult
-from src.scraper.status import check_login_status
+from src.scraper.login import get_handler
 from src.storage.db import db
 from src.utils.notify import send_error_report
 from src.storage.csv_parser import NetreferCsvParser
+from datetime import date as date_type
 from src.utils.logger import get_logger
 
 log = get_logger("main")
@@ -60,10 +60,10 @@ def process_account(
     env_key = f"PASS_{slug.upper()}_{operador.upper().replace('@','_').replace('.','_').replace(' ','_').replace('-','_')}_{username.upper().replace('@','_').replace('.','_').replace(' ','_').replace('-','_')}"
     password = __import__("os").getenv(env_key, "")
     if not password:
-        log.error(f"Contraseña no encontrada para {username} — env: {env_key}")
+        log.error(f"Password não encontrada para {username} — env: {env_key}")
         if not dry_run:
             db.update_account_status(
-                account_id, "error", f"Contraseña env var no definida: {env_key}"
+                account_id, "error", f"Password env var não definida: {env_key}"
             )
         return
 
@@ -89,9 +89,9 @@ def process_account(
             # ── Login ──────────────────────────────────────────────────────
             status = handler.login(page, login_url, username, password)
 
-            if status == "LIMITE DE EJECUCIÓN":
+            if status == "RATE_LIMIT":
                 log.warning(
-                    f"Limite de ejecucion - aguardando {config.rate_limit_wait}s y intentando nuevamente..."
+                    f"Rate limit — aguardando {config.rate_limit_wait}s e a tentar novamente..."
                 )
                 time.sleep(config.rate_limit_wait)
                 # Nova tentativa com contexto limpo
@@ -101,26 +101,26 @@ def process_account(
                 page.set_default_timeout(config.default_timeout)
                 status = handler.login(page, login_url, username, password)
 
-            if status != "REALIZADO":
-                log.warning(f"Login fallido: {status}")
+            if status != "SUCCESS":
+                log.warning(f"Login falhou: {status}")
                 if not dry_run:
                     db.update_account_status(
                         account_id, "error", status, increment_retry=True
                     )
                     if run_id:
                         db.finish_run(run_id, "error", error=status)
-                    if status == "CUENTA BLOQUEADA":
+                    if status == "ACCOUNT_DISABLED":
                         db.update_account_status(account_id, "disabled")
                 browser.close()
                 return
 
-            log.info("Login realizado - navegando al informe...")
+            log.info("Login OK — a navegar para relatório...")
 
             # ── Download CSV ───────────────────────────────────────────────
-            csv_path = download_report(page, account, slug)
+            csv_path = download_report(page, account)
 
             if not csv_path:
-                log.warning("CSV no descargado - sin datos para importar")
+                log.warning("CSV não descarregado — sem dados para importar")
                 if not dry_run:
                     db.update_account_status(account_id, "success")
                     if run_id:
@@ -136,19 +136,23 @@ def process_account(
                 username=username,
                 platform_name=platform["name"],
             )
-            rows = parser.parse(csv_path, scrape_run_id=run_id)
+            # report_month: primeiro dia do mês actual (ex: "2026-06-01")
+            report_month = date_type.today().replace(day=1).isoformat()
+            rows = parser.parse_monthly(
+                csv_path, report_month=report_month, scrape_run_id=run_id
+            )
 
             if not dry_run and rows:
                 imported = db.upsert_stats(rows)
-                log.info(f"Importados {imported} registros en Supabase")
+                log.info(f"Importados {imported} registos no Supabase")
                 db.update_account_status(account_id, "success")
                 if run_id:
                     db.finish_run(run_id, "success", rows=imported)
             elif dry_run:
-                log.info(f"[DRY RUN] {len(rows)} registros serían importados")
+                log.info(f"[DRY RUN] {len(rows)} registos seriam importados")
 
         except Exception as e:
-            log.exception(f"Error inesperado en {username}: {e}")
+            log.exception(f"Erro inesperado em {username}: {e}")
             if not dry_run:
                 db.update_account_status(
                     account_id, "error", str(e), increment_retry=True
@@ -159,7 +163,7 @@ def process_account(
             browser.close()
 
 
-def download_report(page: Page, account: dict, slug: str) -> Path | None:
+def download_report(page: Page, account: dict) -> Path | None:
     """
     Navega para o relatório MarketingSourceDailyFigures, preenche o período,
     pesquisa e descarrega o CSV.
@@ -171,57 +175,41 @@ def download_report(page: Page, account: dict, slug: str) -> Path | None:
     """
     from urllib.parse import urlparse
 
-    # ── 1. Calcula período ────────────────────────────────────────────────────
-    date_from = (datetime.now() - timedelta(days=config.days_window)).strftime(
-        "%d-%m-%Y"
-    )
-    date_to = datetime.now().strftime("%d-%m-%Y")
-    log.info(f"Periodo: {date_from} → {date_to}")
-
-    # ── 2. Navega directamente para o relatório ───────────────────────────────
+    # ── 1. Navega para o relatório mensal ────────────────────────────────────
     parsed = urlparse(account["login_url"])
     base_url = f"{parsed.scheme}://{parsed.netloc}"
-    report_url = f"{base_url}/affiliates/Reports/MarketingSourceDailyFigures"
-    log.info(f"Navegando para: {report_url}")
-    page.goto(report_url, wait_until="domcontentloaded")
 
-    if "login" in page.url.lower():
-        log.error("Sesión expirada - redirigido al login")
-        return None
+    report_url = f"{base_url}/affiliates/Reports/MarketingSourceMonthlyFigures"
 
-    # ── 2b. Força idioma Inglês ───────────────────────────────────────────────
-    # Navega para o URL de mudança de idioma (languageID=1 = English)
-    # Garante que os cabeçalhos do CSV são sempre em EN independentemente
-    # do idioma configurado pelo operador
-    lang_url = f"{base_url}/affiliates/Home/UpdateUserLanguage?languageID=1"
-    page.goto(lang_url, wait_until="domcontentloaded")
-    log.debug("Idioma establecido en EN")
+    # Define idioma EN via fetch silencioso (sem carregar página extra)
+    lang_path = "/affiliates/Home/UpdateUserLanguage?languageID=1"
+    try:
+        page.evaluate(f"fetch('{lang_path}')")
+        log.debug("Idioma definido para EN (fetch silencioso)")
+    except Exception:
+        pass
 
-    # Navega agora para o relatório
     page.goto(report_url, wait_until="domcontentloaded")
     if "login" in page.url.lower():
-        log.error("Sesión expirada después del cambio de idioma")
+        log.error("Sessão expirou — redirecionado para login")
         return None
+    log.info(f"A navegar para: {report_url}")
 
-    # ── 3. Preenche datas ─────────────────────────────────────────────────────
-    # selectedDateTo já vem com hoje por default — só preenche o DateFrom
-    for sel, val in [("#selectedDateFrom", date_from)]:
-        try:
-            page.wait_for_selector(sel, state="visible", timeout=8000)
-            page.click(sel)
-            page.keyboard.press("Control+a")
-            page.keyboard.press("Delete")
-            page.keyboard.type(val, delay=80)
-            page.keyboard.press("Tab")
-            time.sleep(0.3)
-            log.debug(f"Fecha rellenada: {sel} = {val}")
-        except Exception as e:
-            log.warning(f"Error al rellenar {sel}: {e}")
+    # ── 2. Selecciona o mês actual no dropdown ────────────────────────────────
+    # O selector #selectedDateFrom é agora um <select> com options "Jun 2026", etc.
+    # Seleccionamos sempre a primeira opção (mês actual)
+    try:
+        page.wait_for_selector("#selectedDateFrom", state="visible", timeout=8000)
+        # Selecciona o primeiro option (mês mais recente)
+        page.select_option("#selectedDateFrom", index=0)
+        log.debug("Mês seleccionado: primeira opção do dropdown")
+    except Exception as e:
+        log.warning(f"Erro ao seleccionar mês: {e}")
 
     # ── 4. Clica em Pesquisar ─────────────────────────────────────────────────
     # Tenta vários selectores possíveis para o botão de pesquisa
     btn_candidates = [
-        "#btnSearchMarketingDailyFigures",
+        "#btnSearchMarketingMonthlyFigures",
         "#btnSearch",
         "button[id*='Search']",
         "input[id*='Search']",
@@ -234,7 +222,7 @@ def download_report(page: Page, account: dict, slug: str) -> Path | None:
             if el.count() > 0 and el.is_visible():
                 el.click()
                 btn_clicked = True
-                log.debug(f"botón de búsqueda presionado: {btn_sel}")
+                log.debug(f"Botão de pesquisa clicado: {btn_sel}")
                 break
         except Exception:
             continue
@@ -243,30 +231,23 @@ def download_report(page: Page, account: dict, slug: str) -> Path | None:
         btns = page.evaluate(
             "() => [...document.querySelectorAll('button,input[type=submit]')].map(b => ({id:b.id,text:b.textContent.trim().slice(0,30)}))"
         )
-        log.error(f"No se encontró el botón de búsqueda. Botones en la página: {btns}")
+        log.error(f"Botão de pesquisa não encontrado. Botões na página: {btns}")
         return None
 
     # ── 5. Aguarda resultado ──────────────────────────────────────────────────
-    SELECTOR_DATA = "#marketingSourceDailyFiguresDataTable tbody tr"
+    SELECTOR_DATA = "#marketingSourceMonthlyFiguresDataTable tbody tr"
     SELECTOR_NODATA = "#jsDivGenericValidation"
 
-    # Espera o spinner desaparecer
-    try:
-        page.wait_for_selector(".dataTables_processing", state="hidden", timeout=5000)
-    except Exception:
-        pass
-
-    # Aguarda linhas na tabela OU mensagem sem dados
+    # Aguarda linhas na tabela OU mensagem sem dados (único wait, sem spinner intermédio)
     try:
         page.locator(f"{SELECTOR_DATA}, {SELECTOR_NODATA}").first.wait_for(
-            state="visible", timeout=30000
+            state="visible", timeout=35000
         )
     except Exception:
-        # Verifica se a tabela já tem linhas mesmo sem o wait ter disparado
         if page.locator(SELECTOR_DATA).count() > 0:
-            log.debug("Tabla ya tenía datos - continuando")
+            log.debug("Tabela já tinha dados — continuando")
         else:
-            log.warning("Tiempo de espera agotado para los datos del informe (30s)")
+            log.warning("Timeout a aguardar dados do relatório (35s)")
             return None
 
     # Sem dados — não é erro
@@ -274,11 +255,11 @@ def download_report(page: Page, account: dict, slug: str) -> Path | None:
         page.locator(SELECTOR_NODATA).count() > 0
         and page.locator(SELECTOR_NODATA).is_visible()
     ):
-        log.info("El relatório no tiene datos para el período")
+        log.info("Relatório sem dados para o período")
         return None
 
     row_count = page.locator(SELECTOR_DATA).count()
-    log.info(f"Tabla cargada con {row_count} filas")
+    log.info(f"Tabela carregada com {row_count} linhas")
 
     # ── 6. Download CSV ───────────────────────────────────────────────────────
     output_dir = Path(config.data_dir)
@@ -298,16 +279,16 @@ def download_report(page: Page, account: dict, slug: str) -> Path | None:
 
         download = dl_info.value
         download.save_as(csv_path)
-        log.info(f"Archivo CSV guardado: {csv_path}")
+        log.info(f"CSV guardado: {csv_path}")
         return csv_path
     except Exception as e:
-        log.error(f"Error al descargar el archivo CSV: {e}")
+        log.error(f"Erro no download do CSV: {e}")
         return None
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Scraper de afiliados de apuestas",
+        description="Scraper de afiliados de apostas",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Exemplos:
@@ -319,29 +300,27 @@ Exemplos:
   python main.py --platform netrefer --dry-run
         """,
     )
-    parser.add_argument("--platform", help="Slug de la plataforma (p. ej. netrefer)")
+    parser.add_argument("--platform", help="Slug da plataforma (ex: netrefer)")
     parser.add_argument(
         "--accounts",
         nargs="+",
         type=int,
         metavar="ID",
-        help="IDs de cuentas específicas a procesar (ej. --accounts 25 31 42)",
+        help="IDs de contas específicas a processar (ex: --accounts 25 31 42)",
     )
-    parser.add_argument(
-        "--dry-run", action="store_true", help="No se guarda en la base de datos"
-    )
+    parser.add_argument("--dry-run", action="store_true", help="Não escreve no DB")
     args = parser.parse_args()
 
     log.info("=" * 60)
-    log.info(f"Inicio — {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    log.info(f"Início — {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     if args.dry_run:
-        log.info("[DRY RUN] No hay entradas en Supabase")
+        log.info("[DRY RUN] Nenhuma escrita no Supabase")
 
     # Inicializa captcha solver (só se a key estiver definida)
     captcha_solver = None
     if config.captcha_api_key:
         captcha_solver = CaptchaSolver(config.captcha_api_key)
-        log.info("2captcha: resolución iniciada")
+        log.info("2captcha: solver iniciado")
 
     # Busca contas activas
     accounts = db.get_active_accounts(platform_slug=args.platform)
@@ -350,19 +329,19 @@ Exemplos:
     if args.accounts:
         accounts = [a for a in accounts if a["id"] in args.accounts]
         log.info(
-            f"Se ha aplicado el filtro --accounts: {args.accounts} → {len(accounts)} cuenta(s)"
+            f"Filtro --accounts aplicado: {args.accounts} → {len(accounts)} conta(s)"
         )
     else:
-        log.info(f"{len(accounts)} cuentas activas")
+        log.info(f"{len(accounts)} contas activas")
 
     if not accounts:
         log.warning(
-            "No se ha encontrado ninguna cuenta con los criterios especificados — a terminar"
+            "Nenhuma conta encontrada com os critérios especificados — a terminar"
         )
         sys.exit(0)
 
     for i, account in enumerate(accounts, 1):
-        log.info(f"[{i}/{len(accounts)}] Procesando cuenta ID {account['id']}")
+        log.info(f"[{i}/{len(accounts)}] A processar conta ID {account['id']}")
         process_account(account, captcha_solver, dry_run=args.dry_run)
         time.sleep(config.sleep_between_accounts)
 
@@ -372,12 +351,10 @@ Exemplos:
     if not args.dry_run:
         error_accounts = db.get_error_accounts()
         if error_accounts:
-            log.info(
-                f"{len(error_accounts)} cuenta(s) con error — enviar correo electrónico..."
-            )
+            log.info(f"{len(error_accounts)} conta(s) com erro — a enviar email...")
             send_error_report(error_accounts)
         else:
-            log.info("Sin errores: el correo electrónico no se ha enviado")
+            log.info("Sem erros — email não enviado")
 
     log.info("Finalizado")
 

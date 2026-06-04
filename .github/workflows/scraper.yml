@@ -1,0 +1,40 @@
+name: Daily Bets Scraper
+
+on:
+  schedule:
+    # Roda todos os dias as 04:00 da manha (UTC)
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+    # Permite rodar manualmente clicando em um botao no GitHub
+
+jobs:
+  run-scraper:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360 # Tempo limite maximo para nao travar
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install Dependencies
+        run: uv pip install --system -r pyproject.toml
+          
+      - name: Install Playwright Browsers
+        run: playwright install --with-deps chromium
+
+      - name: Create .env file
+        run: |
+          cat << 'EOF' > .env
+          ${{ secrets.ENV_FILE_CONTENT }}
+          EOF
+
+      - name: Run Scraper
+        run: python main.py

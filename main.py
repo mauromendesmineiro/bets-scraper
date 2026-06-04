@@ -192,25 +192,25 @@ def download_report(
         pass
 
     page.goto(report_url, wait_until="domcontentloaded")
-    if "login" in page.url.lower():
-        log.warning("Sessão expirou — a tentar novo login...")
+    log.info(f"A navegar para: {report_url}")
+
+    # Detecta redirecionamento para login pela presença do formulário de login,
+    # não pela URL (alguns domínios como login.dafabetaffiliates.com contêm "login" sempre)
+    if page.locator("#txtUsername, #username, input[name='username']").count() > 0:
+        log.warning("Sessão expirou — redirecionado para login, a tentar novo login...")
         if handler and username and password:
-            # Navega explicitamente para a página de login e aguarda estabilização
-            page.goto(account["login_url"], wait_until="networkidle", timeout=30000)
-            time.sleep(1)
             status = handler.login(page, account["login_url"], username, password)
             if status != "SUCCESS":
                 log.error(f"Re-login falhou: {status}")
                 return None
             page.goto(report_url, wait_until="domcontentloaded")
-            if "login" in page.url.lower():
+            if page.locator("#txtUsername, #username, input[name='username']").count() > 0:
                 log.error("Sessão expirou novamente após re-login")
                 return None
             log.info("Re-login bem-sucedido — a continuar")
         else:
             log.error("Sessão expirou — sem dados para re-login")
             return None
-    log.info(f"A navegar para: {report_url}")
 
     # ── 2. Selecciona o mês actual no dropdown ────────────────────────────────
     # O selector #selectedDateFrom é agora um <select> com options "Jun 2026", etc.

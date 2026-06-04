@@ -57,7 +57,7 @@ class BaseLoginHandler:
 
     def login(self, page: Page, url: str, username: str, password: str) -> LoginStatus:
         """Executa o fluxo completo de login e devolve o status."""
-        log.info(f"Al acceder a {url}")
+        log.info(f"Acessando {url}")
         page.goto(url, wait_until="domcontentloaded")
 
         self._fill_credentials(page, username, password)
@@ -70,7 +70,7 @@ class BaseLoginHandler:
         self._wait_after_login(page)
 
         status = check_login_status(page)
-        log.info(f"Estado tras iniciar sesión: {status}")
+        log.info(f"Status após login: {status}")
         return status
 
     def _fill_credentials(self, page: Page, username: str, password: str) -> None:
@@ -81,14 +81,14 @@ class BaseLoginHandler:
     def _solve_captcha(self, page: Page) -> None:
         if not self.captcha_solver:
             raise CaptchaError(
-                "Esta plataforma requiere un captcha, pero TWOCAPTCHA_API_KEY no está definida."
+                "Esta plataforma requer captcha, mas TWOCAPTCHA_API_KEY não está definida."
             )
         if not self.SEL_CAPTCHA or not self.SEL_CAPTCHA_INPUT:
             raise CaptchaError(
-                f"Selectores de captcha no definidos en {self.__class__.__name__}"
+                f"Seletores de captcha não definidos em {self.__class__.__name__}"
             )
 
-        log.info("Se ha detectado un captcha — se resolverá a través de 2captcha...")
+        log.info("Captcha detectado — resolvendo via 2captcha...")
         solution = self.captcha_solver.solve_image(page, self.SEL_CAPTCHA)
         page.fill(self.SEL_CAPTCHA_INPUT, solution)
 
@@ -120,11 +120,11 @@ class BaseLoginHandler:
             )
             if tos_btn.count() > 0 and tos_btn.first.is_visible():
                 log.info(
-                    "Se ha detectado una página de términos y condiciones: se aceptan automáticamente..."
+                    "Página de termos e condições detectada — aceitando automaticamente..."
                 )
                 tos_btn.first.click()
                 page.wait_for_load_state("domcontentloaded", timeout=self.timeout)
-                log.info("T&C aceptados")
+                log.info("Termos e condições aceitos")
         except Exception:
             pass
 
@@ -201,7 +201,7 @@ def get_handler(
     cls = HANDLERS.get(platform_slug)
     if not cls:
         raise ValueError(
-            f"Plataforma no reconocida: '{platform_slug}'. "
+            f"Plataforma não reconhecida: '{platform_slug}'. "
             f"Registradas: {list(HANDLERS.keys())}"
         )
     return cls(captcha_solver=captcha_solver, **kwargs)

@@ -29,7 +29,7 @@ class CaptchaSolver:
     def __init__(self, api_key: str):
         if not api_key:
             raise CaptchaError(
-                "TWOCAPTCHA_API_KEY no está definida. Es necesaria para sitios web con captcha."
+                "TWOCAPTCHA_API_KEY não está definida. É necessária para sites com captcha."
             )
         self.api_key = api_key
 
@@ -47,7 +47,7 @@ class CaptchaSolver:
         Returns:
             Texto do captcha resolvido
         """
-        log.info("Captura de la imagen del captcha...")
+        log.info("Capturando imagem do captcha...")
 
         # 1. Screenshot do elemento captcha (mais preciso que página inteira)
         element = page.locator(captcha_selector)
@@ -55,13 +55,13 @@ class CaptchaSolver:
         img_b64 = base64.b64encode(img_bytes).decode("utf-8")
 
         # 2. Submete para 2captcha
-        log.info("Enviando captcha para 2captcha...")
+        log.info("Enviando captcha ao 2captcha...")
         captcha_id = self._submit(img_b64)
         log.info(f"Captcha enviado — ID: {captcha_id}")
 
         # 3. Aguarda resultado (polling a cada 5s)
         result = self._poll(captcha_id, max_wait)
-        log.info(f"Captcha resuelto: '{result}'")
+        log.info(f"Captcha resolvido: '{result}'")
         return result
 
     def solve_from_page_screenshot(self, page: Page, region: dict | None = None) -> str:
@@ -96,7 +96,7 @@ class CaptchaSolver:
         data = resp.json()
         if data.get("status") != 1:
             raise CaptchaError(
-                f"ha rechazado la imagen: {data.get('error_text', data)}"
+                f"2captcha recusou a imagem: {data.get('error_text', data)}"
             )
         return str(data["request"])
 
@@ -125,13 +125,13 @@ class CaptchaSolver:
                 return str(data["request"])
 
             if data.get("request") != "CAPCHA_NOT_READY":
-                raise CaptchaError(f"Error 2captcha: {data}")
+                raise CaptchaError(f"Erro 2captcha: {data}")
 
             time.sleep(interval)
             waited += interval
 
         raise CaptchaError(
-            f"Se ha agotado el tiempo de espera mientras se resolvía el captcha ({max_wait}s)"
+            f"Tempo esgotado aguardando resolução do captcha ({max_wait}s)"
         )
 
     def report_bad(self, captcha_id: str) -> None:

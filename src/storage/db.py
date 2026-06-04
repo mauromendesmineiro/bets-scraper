@@ -18,7 +18,7 @@ log = get_logger("db")
 class Database:
     def __init__(self):
         self._client: Client = create_client(config.supabase_url, config.supabase_key)
-        log.info("Supabase: conexión establecida")
+        log.info("Supabase: conexão estabelecida")
 
     # ── Plataformas ───────────────────────────────────────────────────────────
 
@@ -44,7 +44,7 @@ class Database:
         if platform_slug:
             plat = self.get_platform_by_slug(platform_slug)
             if not plat:
-                raise ValueError(f"Plataforma no encontrada: '{platform_slug}'")
+                raise ValueError(f"Plataforma não encontrada: '{platform_slug}'")
             platform_id = plat["id"]
 
         query = (
@@ -130,7 +130,7 @@ class Database:
                 on_conflict=conflict_key,
             ).execute()
             total += len(batch)
-            log.debug(f"Upsert: lote {i//batch_size + 1} — {len(batch)} filas")
+            log.debug(f"Upsert: lote {i//batch_size + 1} — {len(batch)} linhas")
 
         return total
 
@@ -142,7 +142,7 @@ class Database:
             resp = self._client.table("v_error_accounts").select("*").execute()
             return resp.data or []
         except Exception as e:
-            log.error(f"Error al leer v_error_accounts: {e}")
+            log.error(f"Erro ao ler v_error_accounts: {e}")
             return []
 
 

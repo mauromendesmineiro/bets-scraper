@@ -130,10 +130,10 @@ def check_login_status(page: Page) -> LoginStatus:
         log.debug(f"Texto de alerta detectado: '{alerts_text[:120]}'")
         for status, patterns in _PATTERNS.items():
             if any(p in alerts_text for p in patterns):
-                log.debug(f"Patrón '{status}' encontrado")
+                log.debug(f"Padrão '{status}' encontrado")
                 return status
         # Há alerta mas nenhum padrão reconhecido — regista para debug
-        log.warning(f"Alerta no reconocido: '{alerts_text[:120]}'")
+        log.warning(f"Alerta não reconhecido: '{alerts_text[:120]}'")
 
     # 2. Reset de password obrigatório
     if _has_password_reset(page):

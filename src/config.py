@@ -13,7 +13,7 @@ from typing import Optional
 def _require(key: str) -> str:
     val = os.getenv(key)
     if not val:
-        raise EnvironmentError(f"Variable de entorno obligatoria no definida: {key}")
+        raise EnvironmentError(f"Variável de ambiente obrigatória não definida: {key}")
     return val.strip()
 
 

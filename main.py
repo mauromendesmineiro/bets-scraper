@@ -117,7 +117,7 @@ def process_account(
             log.info("Login OK — a navegar para relatório...")
 
             # ── Download CSV ───────────────────────────────────────────────
-            csv_path = download_report(page, account)
+            csv_path = download_report(page, account, handler=handler, username=username, password=password)
 
             if not csv_path:
                 log.warning("CSV não descarregado — sem dados para importar")
@@ -163,7 +163,9 @@ def process_account(
             browser.close()
 
 
-def download_report(page: Page, account: dict) -> Path | None:
+def download_report(
+    page: Page, account: dict, handler=None, username: str = "", password: str = ""
+) -> Path | None:
     """
     Navega para o relatório MarketingSourceDailyFigures, preenche o período,
     pesquisa e descarrega o CSV.
@@ -191,8 +193,20 @@ def download_report(page: Page, account: dict) -> Path | None:
 
     page.goto(report_url, wait_until="domcontentloaded")
     if "login" in page.url.lower():
-        log.error("Sessão expirou — redirecionado para login")
-        return None
+        log.warning("Sessão expirou — a tentar novo login...")
+        if handler and username and password:
+            status = handler.login(page, account["login_url"], username, password)
+            if status != "SUCCESS":
+                log.error(f"Re-login falhou: {status}")
+                return None
+            page.goto(report_url, wait_until="domcontentloaded")
+            if "login" in page.url.lower():
+                log.error("Sessão expirou novamente após re-login")
+                return None
+            log.info("Re-login bem-sucedido — a continuar")
+        else:
+            log.error("Sessão expirou — sem dados para re-login")
+            return None
     log.info(f"A navegar para: {report_url}")
 
     # ── 2. Selecciona o mês actual no dropdown ────────────────────────────────

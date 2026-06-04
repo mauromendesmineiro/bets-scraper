@@ -49,14 +49,16 @@ class Database:
 
         query = (
             self._client.table("accounts")
-            .select("*, platforms(id, name, slug, login_path, has_captcha)")
+            .select("*, platforms(id, name, slug, login_path, has_captcha, is_active)")
             .eq("is_active", True)
         )
         if platform_id:
             query = query.eq("platform_id", platform_id)
 
         resp = query.execute()
-        return resp.data or []
+        accounts = resp.data or []
+        # Filtra contas cujas plataformas estão inativas
+        return [a for a in accounts if a.get("platforms", {}).get("is_active", True)]
 
     def update_account_status(
         self,

@@ -67,7 +67,7 @@ def main():
         empresa = str(row.get("Empresa", "")).strip()
         login_url = clean_url(row.get("URL", ""))
         file_name = str(row.get("FileName", "")).strip()
-        has_captcha = bool(row.get("captcha", 0) == 1)
+        has_captcha = bool(row.get("Captcha", row.get("captcha", 0)) == 1)
 
         if not username:
             warnings.append("Linha sem username ignorada")

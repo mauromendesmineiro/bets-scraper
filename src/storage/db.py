@@ -118,7 +118,7 @@ class Database:
         # Detecta se são registos mensais ou diários pela primeira linha
         is_monthly = rows[0].get("report_month") is not None
         conflict_key = (
-            "account_id,report_month,marketing_source_id"
+            "account_id,report_month,report_date,marketing_source_id"
             if is_monthly
             else "account_id,report_date,marketing_source_id"
         )

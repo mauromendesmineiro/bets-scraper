@@ -2,8 +2,8 @@ name: Daily Bets Scraper
 
 on:
   schedule:
-    # Roda todos os dias as 07:00 da manha (UTC)
-    - cron: '0 7 * * *'
+    # Roda todos os dias as 06:30 UTC (depois de meia-noite no México)
+    - cron: '30 6 * * *'
   workflow_dispatch:
     # Permite rodar manualmente clicando em um botao no GitHub
 

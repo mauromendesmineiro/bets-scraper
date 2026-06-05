@@ -39,6 +39,11 @@ def main():
         default=1,
         help="ID da plataforma no Supabase (default: 1 = Netrefer)",
     )
+    parser.add_argument(
+        "--slug",
+        default="NETREFER",
+        help="Slug da plataforma para nome das vars de ambiente (ex: INCOME_ACCESS)",
+    )
     parser.add_argument("--env-output", default=".env.passwords")
     parser.add_argument("--sql-output", default="tools/migrate_accounts.sql")
     args = parser.parse_args()
@@ -82,9 +87,8 @@ def main():
 
         # Variável de ambiente para a password
         # Convenção: PASS_{SLUG_PLATAFORMA}_{USERNAME_SANITIZADO}
-        slug = "NETREFER"  # hardcoded por agora — ajustar se necessário
         env_key = (
-            f"PASS_{slug}_{sanitize_env_key(operador)}_{sanitize_env_key(username)}"
+            f"PASS_{sanitize_env_key(args.slug)}_{sanitize_env_key(operador)}_{sanitize_env_key(username)}"
         )
         env_lines.append(f"{env_key}={password}")
 

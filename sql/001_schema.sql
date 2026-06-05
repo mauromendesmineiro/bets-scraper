@@ -157,7 +157,7 @@ alter table affiliate_stats
 
 alter table affiliate_stats
     add constraint uq_stat_monthly
-    unique (account_id, report_month, marketing_source_id);
+    unique (account_id, report_month, report_date, marketing_source_id);
 
 -- ============================================================
 -- 5. ÍNDICES
@@ -258,4 +258,11 @@ create index if not exists idx_stats_month on affiliate_stats(report_month desc)
 -- ============================================================
 insert into platforms (name, slug, login_path, has_captcha) values
     ('Netrefer', 'netrefer', '/affiliates/Account/Login', false)
+on conflict (slug) do nothing;
+
+-- ============================================================
+-- 10. SEED: Income Access
+-- ============================================================
+insert into platforms (id, name, slug, login_path, has_captcha) values
+    (2, 'Income Access', 'income_access', '/login.asp', true)
 on conflict (slug) do nothing;

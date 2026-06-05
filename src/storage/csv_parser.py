@@ -135,7 +135,11 @@ class NetreferCsvParser:
             record["report_date"] = today
             record["report_month"] = report_month
             rows.append(record)
-        log.info(f"Mensal: {len(rows)} registos parseados de {Path(csv_path).name}")
+
+        _ACTIVITY_FIELDS = ("unique_clicks", "signups", "first_time_depositing_customers", "cpa_triggered")
+        before = len(rows)
+        rows = [r for r in rows if any((r.get(f) or 0) != 0 for f in _ACTIVITY_FIELDS)]
+        log.info(f"Mensal: {len(rows)} registos parseados de {Path(csv_path).name} ({before - len(rows)} filtrados sem actividade)")
         return rows
 
     def _load(self, csv_path: str | Path) -> tuple[pd.DataFrame, dict[str, str]]:

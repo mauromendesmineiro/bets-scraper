@@ -157,7 +157,7 @@ alter table affiliate_stats
 
 alter table affiliate_stats
     add constraint uq_stat_monthly
-    unique (account_id, report_month, marketing_source_id);
+    unique (account_id, report_month, report_date, marketing_source_id);
 
 -- ============================================================
 -- 5. ÍNDICES

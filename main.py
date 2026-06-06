@@ -142,9 +142,12 @@ def process_account(
                 csv_path, report_month=report_month, scrape_run_id=run_id
             )
 
-            if not dry_run and rows:
-                imported = db.upsert_stats(rows)
-                log.info(f"Importados {imported} registos no Supabase")
+            if not dry_run:
+                if rows:
+                    imported = db.upsert_stats(rows)
+                    log.info(f"Importados {imported} registos no Supabase")
+                else:
+                    imported = 0
                 db.update_account_status(account_id, "success")
                 if run_id:
                     db.finish_run(run_id, "success", rows=imported)

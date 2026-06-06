@@ -94,7 +94,7 @@ class BaseLoginHandler:
 
     def _submit(self, page: Page) -> None:
         page.click(self.SEL_SUBMIT)
-        page.wait_for_load_state("domcontentloaded", timeout=self.timeout)
+        page.wait_for_load_state("domcontentloaded", timeout=30000)
 
     def _handle_agree_popup(self, page: Page) -> None:
         """

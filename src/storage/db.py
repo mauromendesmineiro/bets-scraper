@@ -4,6 +4,7 @@ Camada de acesso ao Supabase.
 
 from __future__ import annotations
 
+import time
 from datetime import datetime
 from typing import Any
 
@@ -14,6 +15,34 @@ from src.utils.logger import get_logger
 
 log = get_logger("db")
 
+_RETRYABLE = (
+    "Connection reset by peer",
+    "ReadError",
+    "ConnectError",
+    "RemoteProtocolError",
+    "ConnectionError",
+)
+_MAX_RETRIES = 3
+_BACKOFF_BASE = 2.0
+
+
+def _execute_with_retry(builder):
+    """Executa um query builder do PostgREST com retry em erros de rede transitórios."""
+    last_exc: Exception | None = None
+    for attempt in range(_MAX_RETRIES):
+        try:
+            return builder.execute()
+        except Exception as exc:
+            msg = str(exc)
+            if any(tag in msg for tag in _RETRYABLE):
+                wait = _BACKOFF_BASE ** attempt
+                log.warning(f"Supabase: erro de rede transitório (tentativa {attempt + 1}/{_MAX_RETRIES}), aguardando {wait:.0f}s — {msg[:120]}")
+                time.sleep(wait)
+                last_exc = exc
+            else:
+                raise
+    raise last_exc
+
 
 class Database:
     def __init__(self):
@@ -23,12 +52,11 @@ class Database:
     # ── Plataformas ───────────────────────────────────────────────────────────
 
     def get_platform_by_slug(self, slug: str) -> dict | None:
-        resp = (
+        resp = _execute_with_retry(
             self._client.table("platforms")
             .select("*")
             .eq("slug", slug)
             .limit(1)
-            .execute()
         )
         return resp.data[0] if resp.data else None
 
@@ -55,7 +83,7 @@ class Database:
         if platform_id:
             query = query.eq("platform_id", platform_id)
 
-        resp = query.execute()
+        resp = _execute_with_retry(query)
         accounts = resp.data or []
         # Filtra contas cujas plataformas estão inativas
         return [a for a in accounts if a.get("platforms", {}).get("is_active", True)]
@@ -78,36 +106,39 @@ class Database:
             payload["last_error_at"] = now
             payload["last_error_msg"] = error_msg
             if increment_retry:
-                self._client.rpc(
-                    "increment_retry", {"account_id": account_id}
-                ).execute()
+                _execute_with_retry(
+                    self._client.rpc("increment_retry", {"account_id": account_id})
+                )
         elif status == "disabled":
             payload["is_active"] = False
 
         payload["last_login_at"] = now
-        self._client.table("accounts").update(payload).eq("id", account_id).execute()
+        _execute_with_retry(
+            self._client.table("accounts").update(payload).eq("id", account_id)
+        )
 
     # ── Execuções ─────────────────────────────────────────────────────────────
 
     def start_run(self, account_id: int) -> int:
-        resp = (
+        resp = _execute_with_retry(
             self._client.table("scrape_runs")
             .insert({"account_id": account_id, "status": "running"})
-            .execute()
         )
         return resp.data[0]["id"]
 
     def finish_run(
         self, run_id: int, status: str, rows: int = 0, error: str = ""
     ) -> None:
-        self._client.table("scrape_runs").update(
-            {
-                "status": status,
-                "finished_at": datetime.utcnow().isoformat(),
-                "rows_imported": rows,
-                "error_msg": error or None,
-            }
-        ).eq("id", run_id).execute()
+        _execute_with_retry(
+            self._client.table("scrape_runs").update(
+                {
+                    "status": status,
+                    "finished_at": datetime.utcnow().isoformat(),
+                    "rows_imported": rows,
+                    "error_msg": error or None,
+                }
+            ).eq("id", run_id)
+        )
 
     # ── Dados de afiliados ────────────────────────────────────────────────────
 
@@ -127,10 +158,12 @@ class Database:
         total = 0
         for i in range(0, len(rows), batch_size):
             batch = rows[i : i + batch_size]
-            self._client.table("affiliate_stats").upsert(
-                batch,
-                on_conflict=conflict_key,
-            ).execute()
+            _execute_with_retry(
+                self._client.table("affiliate_stats").upsert(
+                    batch,
+                    on_conflict=conflict_key,
+                )
+            )
             total += len(batch)
             log.debug(f"Upsert: lote {i//batch_size + 1} — {len(batch)} linhas")
 
@@ -141,7 +174,7 @@ class Database:
     def get_error_accounts(self) -> list[dict]:
         """Lê a view v_error_accounts — contas activas com status erro."""
         try:
-            resp = self._client.table("v_error_accounts").select("*").execute()
+            resp = _execute_with_retry(self._client.table("v_error_accounts").select("*"))
             return resp.data or []
         except Exception as e:
             log.error(f"Erro ao ler v_error_accounts: {e}")

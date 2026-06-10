@@ -32,11 +32,11 @@ def send_error_report(error_accounts: list[dict]) -> None:
     #    return
 
     if not config.smtp_user or not config.smtp_password:
-        log.warning("SMTP_USER ou SMTP_PASSWORD não definidas — email não enviado")
+        log.warning("SMTP_USER o SMTP_PASSWORD no definidas — correo no enviado")
         return
 
     if not config.notify_to:
-        log.warning("NOTIFY_TO não definido — email não enviado")
+        log.warning("NOTIFY_TO no definido — correo no enviado")
         return
 
     # if not config.notify_to or not config.notify_from:
@@ -64,7 +64,7 @@ def send_error_report(error_accounts: list[dict]) -> None:
         msg["Cc"] = ", ".join(cc_list)
 
     subject = (
-        f"Extração de Afiliados — {len(error_accounts)} conta(s) com erro — "
+        f"Extracción de Afiliados — {len(error_accounts)} cuenta(s) con error — "
         f"({datetime.now().strftime('%d/%m/%Y %H:%M')})"
     )
     msg["Subject"] = subject
@@ -74,7 +74,7 @@ def send_error_report(error_accounts: list[dict]) -> None:
 
     try:
 
-        log.info("Conectando ao servidor SMTP do Gmail...")
+        log.info("Conectando al servidor SMTP de Gmail...")
         with smtplib.SMTP("smtp.gmail.com", 587) as server:
             server.starttls()  # Ativa a criptografia TLS de segurança
             server.login(config.smtp_user, config.smtp_password)
@@ -82,16 +82,16 @@ def send_error_report(error_accounts: list[dict]) -> None:
                 msg, from_addr=config.smtp_user, to_addrs=all_recipients
             )
 
-        log.info("Email enviado com sucesso via SMTP!")
+        log.info("Correo enviado correctamente vía SMTP.")
 
     except Exception as e:
-        log.error(f"Erro ao enviar email via SMTP: {e}")
+        log.error(f"Error al enviar correo vía SMTP: {e}")
 
 
 def _build_html(accounts: list[dict]) -> str:
     rows = ""
     for a in accounts:
-        status_color = "#e74c3c"  # vermelho para erro
+        status_color = "#e74c3c"  # rojo para error
         rows += f"""
         <tr>
             <td style="padding:8px 12px;border-bottom:1px solid #eee">{a.get('id', '')}</td>
@@ -116,14 +116,14 @@ def _build_html(accounts: list[dict]) -> str:
 
             <!-- Header -->
             <div style="background:#2c3e50;padding:24px 32px">
-                <h1 style="color:white;margin:0;font-size:20px">Extração de Afiliados — Relatório de Erros</h1>
-                <p style="color:#aab;margin:6px 0 0;font-size:14px">{datetime.now().strftime('%d/%m/%Y às %H:%M')}</p>
+                <h1 style="color:white;margin:0;font-size:20px">Extracción de Afiliados — Informe de Errores</h1>
+                <p style="color:#aab;margin:6px 0 0;font-size:14px">{datetime.now().strftime('%d/%m/%Y a las %H:%M')}</p>
             </div>
 
             <!-- Summary -->
             <div style="padding:20px 32px;background:#fff8f0;border-bottom:1px solid #ffe0b2">
                 <p style="margin:0;font-size:15px;color:#e65100">
-                    <strong>{len(accounts)} conta(s)</strong> com erro na última execução.
+                    <strong>{len(accounts)} cuenta(s)</strong> con error en la última ejecución.
                 </p>
             </div>
 
@@ -135,10 +135,10 @@ def _build_html(accounts: list[dict]) -> str:
                             <th style="padding:10px 12px;text-align:left;border-bottom:2px solid #dee2e6;color:#495057">ID</th>
                             <th style="padding:10px 12px;text-align:left;border-bottom:2px solid #dee2e6;color:#495057">Plataforma</th>
                             <th style="padding:10px 12px;text-align:left;border-bottom:2px solid #dee2e6;color:#495057">Operador</th>
-                            <th style="padding:10px 12px;text-align:left;border-bottom:2px solid #dee2e6;color:#495057">Username</th>
-                            <th style="padding:10px 12px;text-align:left;border-bottom:2px solid #dee2e6;color:#495057">Status</th>
-                            <th style="padding:10px 12px;text-align:left;border-bottom:2px solid #dee2e6;color:#495057">Data do Erro</th>
-                            <th style="padding:10px 12px;text-align:left;border-bottom:2px solid #dee2e6;color:#495057">Mensagem</th>
+                            <th style="padding:10px 12px;text-align:left;border-bottom:2px solid #dee2e6;color:#495057">Usuario</th>
+                            <th style="padding:10px 12px;text-align:left;border-bottom:2px solid #dee2e6;color:#495057">Estado</th>
+                            <th style="padding:10px 12px;text-align:left;border-bottom:2px solid #dee2e6;color:#495057">Fecha del Error</th>
+                            <th style="padding:10px 12px;text-align:left;border-bottom:2px solid #dee2e6;color:#495057">Mensaje</th>
                         </tr>
                     </thead>
                     <tbody>{rows}</tbody>
@@ -148,8 +148,8 @@ def _build_html(accounts: list[dict]) -> str:
             <!-- Footer -->
             <div style="padding:16px 32px;background:#f8f9fa;border-top:1px solid #eee">
                 <p style="margin:0;font-size:12px;color:#999">
-                    Gerado automaticamente por Extração de Afiliados •
-                    Para reprocessar as contas com erro:
+                    Generado automáticamente por Extracción de Afiliados •
+                    Para reprocesar las cuentas con error:
                     <code style="background:#eee;padding:2px 6px;border-radius:3px">
                         python main.py --accounts {' '.join(str(a.get('id','')) for a in accounts)}
                     </code>
